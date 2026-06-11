@@ -25,5 +25,12 @@ export RUSS_TICK_HEARTBEAT="$HOME/.russ/dispatcher-tick-$RT.heartbeat"
 export RUSS_CONFIG="$CONF"
 export RUSS_DISPATCH_WATCHDOG_LOG="/tmp/russ-dispatch-watchdog-$RT.log"
 export RUSS_NEED_DIR="${RUSS_NEED_DIR:-/tmp/russ-needs-$RT}"
+# Completion-throughput wedge detection (lib/russ-mcp.sh bumps this marker on every
+# successful complete_need; the watchdog restarts if it goes stale while claims are
+# fresh). Namespaced per runtime, like the tick heartbeat.
+export RUSS_COMPLETION_MARKER="${RUSS_COMPLETION_MARKER:-$HOME/.russ/dispatcher-completion-$RT.marker}"
+# Tell the watchdog the launchd label that runs it, so a wedge an in-place restart
+# can't clear can escalate to `launchctl kickstart -k` (see install-runtime.sh).
+export RUSS_DISPATCH_LAUNCHD_LABEL="${RUSS_DISPATCH_LAUNCHD_LABEL:-team.$RT.runtime-harness.claude-dispatcher}"
 
 exec "$HERE/dispatcher-watchdog.sh"

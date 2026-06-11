@@ -51,8 +51,28 @@ russ_heartbeat() {
 russ_next_need() { _russ_tool "next_need" '{}'; }
 
 # russ_complete_need NEED_ID — ack a finished need (the lease is released).
+#
+# On a SUCCESSFUL ack this also bumps the per-runtime COMPLETION MARKER's mtime.
+# That marker is the local, dispatcher-independent "a need actually reached done"
+# signal the watchdog uses to catch a fresh-heartbeat/zero-completion wedge (the
+# loop keeps ticking + claiming but stops finishing needs). Every completion in
+# this harness flows through this one function, so the marker can never drift from
+# reality. It is opt-in via RUSS_COMPLETION_MARKER (the warm-dispatcher sets it
+# per runtime, namespaced like RUSS_TICK_HEARTBEAT); unset = no-op, so sourcing
+# this lib outside the dispatcher (e.g. a per-need worker that has its own env)
+# costs nothing.
 russ_complete_need() {
-  _russ_tool "complete_need" "$(jq -cn --arg id "$1" '{need_id:$id}')"
+  local out rc=0
+  # Guard against `set -e` (this lib runs under `set -euo pipefail`): a failed ack
+  # must let us still inspect $? and propagate it, not abort the caller mid-completion.
+  out="$(_russ_tool "complete_need" "$(jq -cn --arg id "$1" '{need_id:$id}')")" || rc=$?
+  if [ "$rc" -eq 0 ] && [ -n "${RUSS_COMPLETION_MARKER:-}" ]; then
+    mkdir -p "$(dirname "$RUSS_COMPLETION_MARKER")" 2>/dev/null || true
+    : >> "$RUSS_COMPLETION_MARKER" 2>/dev/null || true
+    touch "$RUSS_COMPLETION_MARKER" 2>/dev/null || true
+  fi
+  [ -n "$out" ] && printf '%s\n' "$out"
+  return "$rc"
 }
 
 # russ_chat_post NEED_ID IDEMPOTENCY_KEY BODY [PARENT_MESSAGE_ID]
